@@ -22,14 +22,14 @@ export default function AudioRecorder() {
 
       mediaRecorder.onstop = () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        // Aqui futuramente enviaremos o blob para o Cloudflare R2
-        console.log('Áudio gravado com sucesso! Tamanho:', audioBlob.size);
+        // TODO: We will send this blob to Cloudflare R2 later
+        console.log('Audio recorded successfully! Size:', audioBlob.size);
       };
 
       mediaRecorder.start();
       setIsRecording(true);
     } catch (error) {
-      console.error('Erro ao acessar o microfone:', error);
+      console.error('Error accessing microphone:', error);
       alert('Por favor, permita o acesso ao microfone para gravar a consulta.');
     }
   };
@@ -37,7 +37,7 @@ export default function AudioRecorder() {
   const stopRecording = () => {
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
-      // Opcional: parar as tracks do microfone para tirar a luz vermelha da aba do navegador
+      // Optional: stop the microphone tracks to remove the recording indicator from the browser tab
       mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
       setIsRecording(false);
     }
@@ -45,7 +45,7 @@ export default function AudioRecorder() {
 
   return (
     <div className="flex flex-col items-center gap-4 p-6 bg-white rounded-2xl shadow-sm border border-gray-200">
-      <h2 className="text-xl font-semibold text-gray-800">Nova Evolução</h2>
+      <h2 className="text-xl font-semibold text-gray-800">Nova Consulta</h2>
       <button
         onClick={isRecording ? stopRecording : startRecording}
         className={`px-6 py-3 rounded-full font-medium text-white transition-all ${

@@ -12,7 +12,6 @@ export default function Home() {
         </p>
       </div>
 
-      {/* Aqui estamos renderizando o nosso componente na tela */}
       <AudioRecorder />
     </main>
   );
