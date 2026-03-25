@@ -44,11 +44,41 @@ export default function AudioRecorder() {
         }
       };
 
-      mediaRecorder.onstop = () => {
+      mediaRecorder.onstop = async () => {
         const audioBlob = new Blob(audioChunksRef.current, {
           type: "audio/webm",
         });
         console.log("Audio recorded successfully! Size:", audioBlob.size);
+
+        try {
+          const filename = `consulta.webm`;
+          const response = await fetch("/api/upload", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ filename, contentType: "audio/webm" }),
+          });
+
+          if (!response.ok) throw new Error("Falha ao obter URL de upload");
+
+          const { uploadUrl } = await response.json();
+
+          console.log("Enviando para a nuvem...");
+          const uploadResponse = await fetch(uploadUrl, {
+            method: "PUT",
+            headers: { "Content-Type": "audio/webm" },
+            body: audioBlob,
+          });
+
+          if (uploadResponse.ok) {
+            console.log("Upload concluído com sucesso!");
+            alert("Áudio enviado com sucesso para a nuvem!");
+          } else {
+            throw new Error("Falha no upload para o R2");
+          }
+        } catch (error) {
+          console.error("Erro durante o processo de upload:", error);
+          alert("Ocorreu um erro ao enviar o áudio.");
+        }
       };
 
       mediaRecorder.start();
