@@ -6,10 +6,12 @@ export default function AudioRecorder() {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [prontuario, setProntuario] = useState("");
+  const [statusMessage, setStatusMessage] = useState("");
 
+  // Estados para os dados do profissional
   const [dentistName, setDentistName] = useState("Mateus");
   const [crosp, setCrosp] = useState("123456");
+  const [dentistEmail, setDentistEmail] = useState("mateuspedroso.dev@gmail.com");
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<BlobPart[]>([]);
@@ -29,9 +31,14 @@ export default function AudioRecorder() {
   };
 
   const startRecording = async () => {
+    if (!dentistEmail) {
+      alert("Por favor, preencha o e-mail para receber o prontuário.");
+      return;
+    }
+
     try {
       setRecordingTime(0);
-      setProntuario("");
+      setStatusMessage("");
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mediaRecorder = new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
@@ -46,10 +53,11 @@ export default function AudioRecorder() {
           type: "audio/webm",
         });
         setIsProcessing(true);
+        setStatusMessage("Fazendo upload do áudio seguro...");
 
         try {
-          // 1. Upload para o R2 (como fizemos antes)
-          const filename = `consulta.webm`;
+          // 1. Upload para o R2
+          const filename = `consulta-${Date.now()}.webm`;
           const uploadRes = await fetch("/api/upload", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -65,19 +73,28 @@ export default function AudioRecorder() {
             body: audioBlob,
           });
 
-          // 2. Chamar a IA com os dados do dentista
-          console.log("Gerando prontuário...");
-          const iaRes = await fetch("/api/transcribe", {
+          setStatusMessage("Enviando para a fila de processamento da IA...");
+
+          // 2. Chamar a NOVA rota Assíncrona (Inngest) passando o E-mail
+          const iaRes = await fetch("/api/process-audio", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ fileKey, dentistName, crosp }),
+            body: JSON.stringify({ fileKey, dentistName, crosp, dentistEmail }),
           });
 
-          const { transcription } = await iaRes.json();
-          setProntuario(transcription);
+          const result = await iaRes.json();
+
+          if (iaRes.ok) {
+            // Sucesso! A tela é liberada na hora.
+            setStatusMessage(
+              "✅ Áudio na fila! O prontuário chegará no seu e-mail em breve.",
+            );
+          } else {
+            throw new Error(result.error || "Erro ao processar");
+          }
         } catch (error) {
           console.error("Erro:", error);
-          alert("Erro ao processar a consulta.");
+          setStatusMessage("❌ Ocorreu um erro ao processar a consulta.");
         } finally {
           setIsProcessing(false);
         }
@@ -108,20 +125,30 @@ export default function AudioRecorder() {
           Nova Consulta
         </h2>
 
-        <div className="flex gap-4 my-6">
+        <div className="flex flex-col gap-4 my-6">
+          <div className="flex gap-4">
+            <input
+              type="text"
+              placeholder="Nome do Dentista"
+              value={dentistName}
+              onChange={(e) => setDentistName(e.target.value)}
+              className="flex-1 p-3 border border-gray-300 rounded-lg text-black"
+            />
+            <input
+              type="text"
+              placeholder="CROSP"
+              value={crosp}
+              onChange={(e) => setCrosp(e.target.value)}
+              className="w-1/3 p-3 border border-gray-300 rounded-lg text-black"
+            />
+          </div>
           <input
-            type="text"
-            placeholder="Nome do Dentista"
-            value={dentistName}
-            onChange={(e) => setDentistName(e.target.value)}
-            className="flex-1 p-3 border border-gray-300 rounded-lg text-black"
-          />
-          <input
-            type="text"
-            placeholder="CROSP"
-            value={crosp}
-            onChange={(e) => setCrosp(e.target.value)}
-            className="w-1/3 p-3 border border-gray-300 rounded-lg text-black"
+            type="email"
+            placeholder="Seu E-mail (para receber o prontuário)"
+            value={dentistEmail}
+            onChange={(e) => setDentistEmail(e.target.value)}
+            required
+            className="w-full p-3 border border-gray-300 rounded-lg text-black"
           />
         </div>
       </div>
@@ -132,9 +159,11 @@ export default function AudioRecorder() {
         </div>
       )}
 
-      {isProcessing && (
-        <div className="text-blue-600 font-medium animate-pulse">
-          Analisando áudio e gerando prontuário com IA...
+      {statusMessage && (
+        <div
+          className={`font-medium ${statusMessage.includes("✅") ? "text-green-600" : statusMessage.includes("❌") ? "text-red-600" : "text-blue-600 animate-pulse"}`}
+        >
+          {statusMessage}
         </div>
       )}
 
@@ -155,15 +184,6 @@ export default function AudioRecorder() {
             ? "Processando..."
             : "Gravar Consulta"}
       </button>
-
-      {prontuario && (
-        <div className="w-full mt-6 text-left">
-          <h3 className="font-bold text-gray-700 mb-2">Prontuário Gerado:</h3>
-          <div className="bg-gray-50 p-6 rounded-lg border border-gray-200 whitespace-pre-wrap text-sm text-gray-800 font-mono">
-            {prontuario}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
