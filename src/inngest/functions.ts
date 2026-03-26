@@ -1,9 +1,12 @@
 import { inngest } from "./client";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
+import {
+  S3Client,
+  GetObjectCommand,
+  DeleteObjectCommand,
+} from "@aws-sdk/client-s3";
 import { Resend } from "resend";
 
-// Inicializa os clientes
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY!);
 const resend = new Resend(process.env.RESEND_API_KEY!);
 const s3Client = new S3Client({
@@ -183,15 +186,26 @@ REGRAS DE INFERÊNCIA DIAGNÓSTICA ODONTOLÓGICA
     await step.run("send-email", async () => {
       await resend.emails.send({
         from: "Prontuário IA <nao-responda@prontuario.mateuspedroso.com.br>",
-        to: dentistEmail, // E-mail fornecido no frontend
+        to: dentistEmail,
         subject: `Evolução Odontológica - Paciente (Nova Consulta)`,
         text: prontuario,
       });
     });
 
+    // Etapa 4: Deletar o áudio do Cloudflare R2 por segurança e LGPD
+    await step.run("delete-audio-from-r2", async () => {
+      const deleteCommand = new DeleteObjectCommand({
+        Bucket: process.env.R2_BUCKET_NAME,
+        Key: fileKey,
+      });
+      await s3Client.send(deleteCommand);
+      console.log(`✅ Áudio ${fileKey} deletado com sucesso do R2.`);
+      return { success: true };
+    });
+
     return {
       success: true,
-      message: "Prontuário gerado e enviado com sucesso.",
+      message: "Prontuário gerado, enviado e áudio deletado com sucesso.",
     };
   },
 );
