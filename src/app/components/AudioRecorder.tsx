@@ -13,6 +13,7 @@ export default function AudioRecorder() {
   const [dentistName, setDentistName] = useState("");
   const [crosp, setCrosp] = useState("");
   const [dentistEmail, setDentistEmail] = useState("");
+  const [isReady, setIsReady] = useState(false);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<BlobPart[]>([]);
@@ -22,21 +23,34 @@ export default function AudioRecorder() {
   const supabase = createClient();
 
   useEffect(() => {
-    const checkUser = async () => {
+    const fetchUserData = async () => {
       const {
         data: { user },
       } = await supabase.auth.getUser();
 
       if (!user) {
         router.push("/login");
+        return;
+      }
+
+      if (user.email) setDentistEmail(user.email);
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("full_name, crosp")
+        .eq("id", user.id)
+        .single();
+
+      if (profile && profile.full_name && profile.crosp) {
+        setDentistName(profile.full_name);
+        setCrosp(profile.crosp);
+        setIsReady(true);
       } else {
-        if (user.email) {
-          setDentistEmail(user.email);
-        }
+        router.push("/settings");
       }
     };
 
-    checkUser();
+    fetchUserData();
   }, [router, supabase]);
 
   useEffect(() => {
@@ -54,10 +68,7 @@ export default function AudioRecorder() {
   };
 
   const startRecording = async () => {
-    if (!dentistEmail) {
-      alert("Por favor, aguarde o carregamento do seu e-mail.");
-      return;
-    }
+    if (!isReady) return;
 
     try {
       setRecordingTime(0);
@@ -83,7 +94,7 @@ export default function AudioRecorder() {
           type: "audio/webm",
         });
         setIsProcessing(true);
-        setStatusMessage("A fazer o upload do áudio de forma segura...");
+        setStatusMessage("Fazendo upload do áudio seguro...");
 
         try {
           const filename = `consulta-${Date.now()}.webm`;
@@ -102,7 +113,7 @@ export default function AudioRecorder() {
             body: audioBlob,
           });
 
-          setStatusMessage("A enviar para a fila de processamento da IA...");
+          setStatusMessage("Enviando para a fila de processamento da IA...");
 
           const iaRes = await fetch("/api/process-audio", {
             method: "POST",
@@ -114,7 +125,7 @@ export default function AudioRecorder() {
 
           if (iaRes.ok) {
             setStatusMessage(
-              "✅ Áudio na fila! O prontuário chegará ao seu e-mail em breve.",
+              "✅ Áudio na fila! O prontuário chegará no seu e-mail em breve.",
             );
           } else {
             throw new Error(result.error || "Erro ao processar");
@@ -159,50 +170,36 @@ export default function AudioRecorder() {
     }
   };
 
+  if (!isReady) {
+    return (
+      <div className="flex justify-center p-8">
+        <div className="animate-pulse text-gray-400">
+          Preparando ambiente seguro...
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col items-center gap-6 p-8 bg-white rounded-2xl shadow-sm border border-gray-200 w-full max-w-2xl">
-      <div className="text-center w-full">
-        <h2 className="text-xl font-semibold text-gray-800 mb-1">
-          Nova Consulta
+      <div className="text-center w-full mb-4">
+        <h2 className="text-2xl font-semibold text-gray-800">
+          Olá, {dentistName}
         </h2>
-
-        <div className="flex flex-col gap-4 my-6">
-          <div className="flex gap-4">
-            <input
-              type="text"
-              placeholder="Nome do Dentista"
-              value={dentistName}
-              onChange={(e) => setDentistName(e.target.value)}
-              className="flex-1 p-3 border border-gray-300 rounded-lg text-black"
-            />
-            <input
-              type="text"
-              placeholder="CROSP"
-              value={crosp}
-              onChange={(e) => setCrosp(e.target.value)}
-              className="w-1/3 p-3 border border-gray-300 rounded-lg text-black"
-            />
-          </div>
-
-          <input
-            type="email"
-            placeholder="A carregar utilizador..."
-            value={dentistEmail}
-            disabled={true}
-            className="w-full p-3 border border-gray-200 rounded-lg text-gray-500 bg-gray-100 cursor-not-allowed"
-          />
-        </div>
+        <p className="text-sm text-gray-500 mt-1">
+          Pronto para iniciar uma nova consulta.
+        </p>
       </div>
 
       {isRecording && (
-        <div className="text-4xl font-mono font-bold text-red-500 animate-pulse">
+        <div className="text-5xl font-mono font-bold text-red-500 animate-pulse my-4">
           {formatTime(recordingTime)}
         </div>
       )}
 
       {statusMessage && (
         <div
-          className={`font-medium ${statusMessage.includes("✅") ? "text-green-600" : statusMessage.includes("❌") ? "text-red-600" : "text-blue-600 animate-pulse"}`}
+          className={`font-medium mb-4 ${statusMessage.includes("✅") ? "text-green-600" : statusMessage.includes("❌") ? "text-red-600" : "text-blue-600 animate-pulse"}`}
         >
           {statusMessage}
         </div>
@@ -227,13 +224,13 @@ export default function AudioRecorder() {
         <button
           onClick={startRecording}
           disabled={isProcessing}
-          className={`w-full max-w-md py-4 rounded-xl font-medium text-white transition-all text-lg shadow-sm ${
+          className={`w-full max-w-md py-5 rounded-xl font-bold text-white transition-all text-xl shadow-md hover:shadow-lg ${
             isProcessing
               ? "bg-gray-400 cursor-not-allowed"
-              : "bg-blue-600 hover:bg-blue-700"
+              : "bg-blue-600 hover:bg-blue-700 hover:-translate-y-1"
           }`}
         >
-          {isProcessing ? "A processar..." : "Gravar Consulta"}
+          {isProcessing ? "Processando..." : "Gravar Consulta"}
         </button>
       )}
     </div>
