@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/utils/supabase/client";
 
 export default function AudioRecorder() {
   const [isRecording, setIsRecording] = useState(false);
@@ -8,13 +10,34 @@ export default function AudioRecorder() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
 
-  // Estados para os dados do profissional
-  const [dentistName, setDentistName] = useState("Mateus");
-  const [crosp, setCrosp] = useState("123456");
-  const [dentistEmail, setDentistEmail] = useState("mateuspedroso.dev@gmail.com");
+  // Limpei os dados fixos iniciais para a tela nascer em branco
+  const [dentistName, setDentistName] = useState("");
+  const [crosp, setCrosp] = useState("");
+  const [dentistEmail, setDentistEmail] = useState("");
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<BlobPart[]>([]);
+
+  const router = useRouter();
+  const supabase = createClient();
+
+  useEffect(() => {
+    const checkUser = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        router.push("/login");
+      } else {
+        if (user.email) {
+          setDentistEmail(user.email);
+        }
+      }
+    };
+
+    checkUser();
+  }, [router, supabase]);
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -32,7 +55,7 @@ export default function AudioRecorder() {
 
   const startRecording = async () => {
     if (!dentistEmail) {
-      alert("Por favor, preencha o e-mail para receber o prontuário.");
+      alert("Por favor, aguarde o carregamento do seu e-mail.");
       return;
     }
 
@@ -56,7 +79,6 @@ export default function AudioRecorder() {
         setStatusMessage("Fazendo upload do áudio seguro...");
 
         try {
-          // 1. Upload para o R2
           const filename = `consulta-${Date.now()}.webm`;
           const uploadRes = await fetch("/api/upload", {
             method: "POST",
@@ -75,7 +97,6 @@ export default function AudioRecorder() {
 
           setStatusMessage("Enviando para a fila de processamento da IA...");
 
-          // 2. Chamar a NOVA rota Assíncrona (Inngest) passando o E-mail
           const iaRes = await fetch("/api/process-audio", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -85,7 +106,6 @@ export default function AudioRecorder() {
           const result = await iaRes.json();
 
           if (iaRes.ok) {
-            // Sucesso! A tela é liberada na hora.
             setStatusMessage(
               "✅ Áudio na fila! O prontuário chegará no seu e-mail em breve.",
             );
@@ -142,13 +162,13 @@ export default function AudioRecorder() {
               className="w-1/3 p-3 border border-gray-300 rounded-lg text-black"
             />
           </div>
+
           <input
             type="email"
-            placeholder="Seu E-mail (para receber o prontuário)"
+            placeholder="Carregando usuário..."
             value={dentistEmail}
-            onChange={(e) => setDentistEmail(e.target.value)}
-            required
-            className="w-full p-3 border border-gray-300 rounded-lg text-black"
+            disabled={true}
+            className="w-full p-3 border border-gray-200 rounded-lg text-gray-500 bg-gray-100 cursor-not-allowed"
           />
         </div>
       </div>
