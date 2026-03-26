@@ -10,13 +10,13 @@ export default function AudioRecorder() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
 
-  // Limpei os dados fixos iniciais para a tela nascer em branco
   const [dentistName, setDentistName] = useState("");
   const [crosp, setCrosp] = useState("");
   const [dentistEmail, setDentistEmail] = useState("");
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<BlobPart[]>([]);
+  const isCancelledRef = useRef(false);
 
   const router = useRouter();
   const supabase = createClient();
@@ -62,6 +62,8 @@ export default function AudioRecorder() {
     try {
       setRecordingTime(0);
       setStatusMessage("");
+      isCancelledRef.current = false;
+
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mediaRecorder = new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
@@ -72,11 +74,16 @@ export default function AudioRecorder() {
       };
 
       mediaRecorder.onstop = async () => {
+        if (isCancelledRef.current) {
+          isCancelledRef.current = false;
+          return;
+        }
+
         const audioBlob = new Blob(audioChunksRef.current, {
           type: "audio/webm",
         });
         setIsProcessing(true);
-        setStatusMessage("Fazendo upload do áudio seguro...");
+        setStatusMessage("A fazer o upload do áudio de forma segura...");
 
         try {
           const filename = `consulta-${Date.now()}.webm`;
@@ -95,7 +102,7 @@ export default function AudioRecorder() {
             body: audioBlob,
           });
 
-          setStatusMessage("Enviando para a fila de processamento da IA...");
+          setStatusMessage("A enviar para a fila de processamento da IA...");
 
           const iaRes = await fetch("/api/process-audio", {
             method: "POST",
@@ -107,7 +114,7 @@ export default function AudioRecorder() {
 
           if (iaRes.ok) {
             setStatusMessage(
-              "✅ Áudio na fila! O prontuário chegará no seu e-mail em breve.",
+              "✅ Áudio na fila! O prontuário chegará ao seu e-mail em breve.",
             );
           } else {
             throw new Error(result.error || "Erro ao processar");
@@ -130,11 +137,25 @@ export default function AudioRecorder() {
 
   const stopRecording = () => {
     if (mediaRecorderRef.current && isRecording) {
+      isCancelledRef.current = false;
       mediaRecorderRef.current.stop();
       mediaRecorderRef.current.stream
         .getTracks()
         .forEach((track) => track.stop());
       setIsRecording(false);
+    }
+  };
+
+  const cancelRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      isCancelledRef.current = true;
+      mediaRecorderRef.current.stop();
+      mediaRecorderRef.current.stream
+        .getTracks()
+        .forEach((track) => track.stop());
+      setIsRecording(false);
+      setRecordingTime(0);
+      setStatusMessage("Gravação cancelada.");
     }
   };
 
@@ -165,7 +186,7 @@ export default function AudioRecorder() {
 
           <input
             type="email"
-            placeholder="Carregando usuário..."
+            placeholder="A carregar utilizador..."
             value={dentistEmail}
             disabled={true}
             className="w-full p-3 border border-gray-200 rounded-lg text-gray-500 bg-gray-100 cursor-not-allowed"
@@ -187,23 +208,34 @@ export default function AudioRecorder() {
         </div>
       )}
 
-      <button
-        onClick={isRecording ? stopRecording : startRecording}
-        disabled={isProcessing}
-        className={`w-full max-w-md py-4 rounded-xl font-medium text-white transition-all text-lg shadow-sm ${
-          isRecording
-            ? "bg-red-500 hover:bg-red-600"
-            : isProcessing
+      {isRecording ? (
+        <div className="flex w-full max-w-md gap-4">
+          <button
+            onClick={cancelRecording}
+            className="flex-1 py-4 rounded-xl font-medium text-gray-700 bg-gray-200 hover:bg-gray-300 transition-all text-lg shadow-sm"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={stopRecording}
+            className="flex-1 py-4 rounded-xl font-medium text-white bg-green-600 hover:bg-green-700 transition-all text-lg shadow-sm"
+          >
+            Finalizar Gravação
+          </button>
+        </div>
+      ) : (
+        <button
+          onClick={startRecording}
+          disabled={isProcessing}
+          className={`w-full max-w-md py-4 rounded-xl font-medium text-white transition-all text-lg shadow-sm ${
+            isProcessing
               ? "bg-gray-400 cursor-not-allowed"
               : "bg-blue-600 hover:bg-blue-700"
-        }`}
-      >
-        {isRecording
-          ? "Parar Gravação"
-          : isProcessing
-            ? "Processando..."
-            : "Gravar Consulta"}
-      </button>
+          }`}
+        >
+          {isProcessing ? "A processar..." : "Gravar Consulta"}
+        </button>
+      )}
     </div>
   );
 }
