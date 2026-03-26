@@ -15,6 +15,9 @@ export default function AudioRecorder() {
   const [dentistEmail, setDentistEmail] = useState("");
   const [isReady, setIsReady] = useState(false);
 
+  // NOVO: Estado para o consentimento da LGPD
+  const [consentGiven, setConsentGiven] = useState(false);
+
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<BlobPart[]>([]);
   const isCancelledRef = useRef(false);
@@ -68,7 +71,7 @@ export default function AudioRecorder() {
   };
 
   const startRecording = async () => {
-    if (!isReady) return;
+    if (!isReady || !consentGiven) return; // Trava extra de segurança
 
     try {
       setRecordingTime(0);
@@ -85,6 +88,9 @@ export default function AudioRecorder() {
       };
 
       mediaRecorder.onstop = async () => {
+        // Desmarca o consentimento para o próximo paciente
+        setConsentGiven(false);
+
         if (isCancelledRef.current) {
           isCancelledRef.current = false;
           return;
@@ -167,6 +173,7 @@ export default function AudioRecorder() {
       setIsRecording(false);
       setRecordingTime(0);
       setStatusMessage("Gravação cancelada.");
+      setConsentGiven(false); // Desmarca o consentimento ao cancelar
     }
   };
 
@@ -182,7 +189,7 @@ export default function AudioRecorder() {
 
   return (
     <div className="flex flex-col items-center gap-6 p-8 bg-white rounded-2xl shadow-sm border border-gray-200 w-full max-w-2xl">
-      <div className="text-center w-full mb-4">
+      <div className="text-center w-full mb-2">
         <h2 className="text-2xl font-semibold text-gray-800">
           Olá, {dentistName}
         </h2>
@@ -199,40 +206,61 @@ export default function AudioRecorder() {
 
       {statusMessage && (
         <div
-          className={`font-medium mb-4 ${statusMessage.includes("✅") ? "text-green-600" : statusMessage.includes("❌") ? "text-red-600" : "text-blue-600 animate-pulse"}`}
+          className={`font-medium mb-2 ${statusMessage.includes("✅") ? "text-green-600" : statusMessage.includes("❌") ? "text-red-600" : "text-blue-600 animate-pulse"}`}
         >
           {statusMessage}
         </div>
       )}
 
-      {isRecording ? (
-        <div className="flex w-full max-w-md gap-4">
+      <div className="w-full max-w-md flex flex-col items-center gap-4">
+        {!isRecording && !isProcessing && (
+          <div className="w-full flex items-start gap-3 p-4 bg-blue-50/50 border border-blue-100 rounded-xl text-left transition-all">
+            <input
+              type="checkbox"
+              id="lgpd-consent"
+              checked={consentGiven}
+              onChange={(e) => setConsentGiven(e.target.checked)}
+              className="mt-1 w-5 h-5 text-blue-600 rounded border-gray-300 focus:ring-blue-500 cursor-pointer"
+            />
+            <label
+              htmlFor="lgpd-consent"
+              className="text-sm text-gray-700 leading-snug cursor-pointer select-none"
+            >
+              Confirmo que possuo o consentimento explícito do paciente para a
+              gravação de áudio desta consulta, de acordo com a LGPD.
+            </label>
+          </div>
+        )}
+
+        {isRecording ? (
+          <div className="flex w-full gap-4">
+            <button
+              onClick={cancelRecording}
+              className="flex-1 py-4 rounded-xl font-medium text-gray-700 bg-gray-200 hover:bg-gray-300 transition-all text-lg shadow-sm"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={stopRecording}
+              className="flex-1 py-4 rounded-xl font-medium text-white bg-green-600 hover:bg-green-700 transition-all text-lg shadow-sm"
+            >
+              Finalizar Gravação
+            </button>
+          </div>
+        ) : (
           <button
-            onClick={cancelRecording}
-            className="flex-1 py-4 rounded-xl font-medium text-gray-700 bg-gray-200 hover:bg-gray-300 transition-all text-lg shadow-sm"
+            onClick={startRecording}
+            disabled={isProcessing || !consentGiven}
+            className={`w-full py-5 rounded-xl font-bold text-white transition-all text-xl shadow-md ${
+              isProcessing || !consentGiven
+                ? "bg-gray-400 cursor-not-allowed opacity-70"
+                : "bg-blue-600 hover:bg-blue-700 hover:-translate-y-1 hover:shadow-lg"
+            }`}
           >
-            Cancelar
+            {isProcessing ? "Processando..." : "Gravar Consulta"}
           </button>
-          <button
-            onClick={stopRecording}
-            className="flex-1 py-4 rounded-xl font-medium text-white bg-green-600 hover:bg-green-700 transition-all text-lg shadow-sm"
-          >
-            Finalizar Gravação
-          </button>
-        </div>
-      ) : (
-        <button
-          onClick={startRecording}
-          disabled={isProcessing}
-          className={`w-full max-w-md py-5 rounded-xl font-bold text-white transition-all text-xl shadow-md hover:shadow-lg ${
-            isProcessing
-              ? "bg-gray-400 cursor-not-allowed"
-              : "bg-blue-600 hover:bg-blue-700 hover:-translate-y-1"
-          }`}
-        >
-          {isProcessing ? "Processando..." : "Gravar Consulta"}
-        </button>
-      )}
+        )}
+      </div>
     </div>
   );
 }

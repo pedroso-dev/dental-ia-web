@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
+import Link from "next/link"; // NOVO: Importação do Link
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -137,6 +138,19 @@ export default function LoginPage() {
             >
               Criar nova conta
             </button>
+          </div>
+
+          {/* NOVO: Links para as páginas legais */}
+          <div className="mt-6 text-center text-xs text-gray-500">
+            Ao entrar ou criar uma conta, você concorda com nossos <br />
+            <Link href="/terms" className="text-blue-600 hover:underline">
+              Termos de Uso
+            </Link>{" "}
+            e{" "}
+            <Link href="/privacy" className="text-blue-600 hover:underline">
+              Política de Privacidade
+            </Link>
+            .
           </div>
         </form>
       </div>
