@@ -142,7 +142,7 @@ Formato: lista.
 ASSINATURA FINAL OBRIGATÓRIA
 Ao final de toda evolução, após o último item preenchido, deixar uma linha em branco e escrever exatamente:
 
-${dentistName ? dentistName : 'Patrícia Vilas Boas'} - CROSP ${crosp ? crosp : '105731'}
+${dentistName ? dentistName : "Patrícia Vilas Boas"} - CROSP ${crosp ? crosp : "105731"}
 
 COMPORTAMENTO QUANDO O USUÁRIO ENVIAR UMA TRANSCRIÇÃO
 - Ler toda a transcrição antes de responder.
@@ -161,7 +161,7 @@ FORMATO FINAL
   # Odontologia Hospitalar IPer- Primeira avaliação #
 - Após o cabeçalho, deixar uma linha em branco e seguir com a evolução.
 - Finalizar obrigatoriamente com:
-  ${dentistName ? dentistName : 'Patrícia Vilas Boas'} - CROSP ${crosp ? crosp : '105731'}
+  ${dentistName ? dentistName : "Patrícia Vilas Boas"} - CROSP ${crosp ? crosp : "105731"}
 - Sem introdução.
 - Sem conclusão.
 - Sem observações fora do modelo.
@@ -182,7 +182,7 @@ REGRAS DE INFERÊNCIA DIAGNÓSTICA ODONTOLÓGICA
     // Etapa 3: Enviar o E-mail com o Resend
     await step.run("send-email", async () => {
       await resend.emails.send({
-        from: "DentalAI <onboarding@resend.dev>", // O e-mail padrão de teste do Resend
+        from: "Prontuário IA <nao-responda@prontuario.mateuspedroso.com.br>",
         to: dentistEmail, // E-mail fornecido no frontend
         subject: `Evolução Odontológica - Paciente (Nova Consulta)`,
         text: prontuario,
