@@ -1,22 +1,16 @@
 import AudioRecorder from "./components/AudioRecorder";
-import LogoutButton from "./components/LogoutButton";
+import Header from "./components/Header";
 
 export default function Home() {
   return (
-    // Adicionei a classe "relative" aqui no main
-    <main className="relative flex min-h-screen flex-col items-center justify-center bg-gray-50 p-6">
-      <LogoutButton />
+    <main className="min-h-screen bg-gray-50 flex flex-col">
+      {/* O nosso novo menu fixo no topo */}
+      <Header />
 
-      <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">
-          DentalAI Assistant
-        </h1>
-        <p className="text-gray-600">
-          Grave o áudio da consulta para gerar a evolução clínica.
-        </p>
+      {/* O conteúdo centralizado da página */}
+      <div className="flex-1 flex flex-col items-center justify-center p-6">
+        <AudioRecorder />
       </div>
-
-      <AudioRecorder />
     </main>
   );
 }
