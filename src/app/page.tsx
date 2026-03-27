@@ -42,11 +42,17 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen bg-gray-50 flex flex-col">
+    <main className="min-h-screen bg-gray-50 flex flex-col relative">
       <Header />
 
-      <div className="flex-1 flex flex-col items-center justify-center p-6">
+      <div className="flex-1 flex flex-col items-center justify-center p-6 pb-12">
         <AudioRecorder />
+      </div>
+
+      <div className="md:hidden absolute bottom-4 w-full text-center pointer-events-none select-none">
+        <span className="text-[10px] font-medium text-gray-400 tracking-widest uppercase">
+          v{process.env.NEXT_PUBLIC_APP_VERSION}
+        </span>
       </div>
     </main>
   );

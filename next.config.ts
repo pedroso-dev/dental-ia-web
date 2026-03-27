@@ -1,15 +1,17 @@
 import type { NextConfig } from "next";
 import withPWAInit from "@ducanh2912/next-pwa";
+import pkg from "./package.json";
 
 // Configuração do plugin PWA
 const withPWA = withPWAInit({
   dest: "public",
-  disable: process.env.NODE_ENV === "development", // Mantém desligado no dev para não cachear erros antigos
+  disable: process.env.NODE_ENV === "development",
 });
 
-// Suas configurações normais do Next.js vão aqui dentro
 const nextConfig: NextConfig = {
-  /* config options here */
+  env: {
+    NEXT_PUBLIC_APP_VERSION: pkg.version,
+  },
 };
 
 export default withPWA(nextConfig);

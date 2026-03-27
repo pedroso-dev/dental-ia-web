@@ -31,6 +31,11 @@ export default function Header() {
           DentalAI
         </Link>
 
+        {/* Badge de Versão (Só aparece em ecrãs maiores para poupar espaço no telemóvel) */}
+        <span className="hidden md:inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-50 text-blue-600 border border-blue-100 uppercase tracking-widest select-none">
+          v{process.env.NEXT_PUBLIC_APP_VERSION}
+        </span>
+
         {/* Navegação Desktop (Escondida no celular) */}
         <nav className="hidden md:flex gap-6 items-center">
           <Link
