@@ -132,7 +132,10 @@ Incluir apenas quando houver base clínica suficiente. Caso contrário, omitir c
 Formato: lista.
 
 ## Índice CPO-D:
-Identifique a quantidade total de dentes cariados (C), perdidos/ausentes (P) e obturados/restaurados (O). Faça a soma matemática exata desses três valores para obter o índice CPO-D.
+Identifique a quantidade total de dentes cariados (C), perdidos/ausentes (P) e obturados/restaurados (O). 
+Faça a soma matemática exata desses três valores para obter o índice CPO-D.
+Proteses fixas entram em O (obturações/restaurações).
+Os cisos (18, 28, 38 e 48) quando estão ausentes, não entram em P (perdidos/ausentes), a menos que haja menção explícita de que foram extraídos por motivo odontológico (cárie, infecção, etc). Se os cisos estão ausentes sem menção de motivo odontológico, não devem ser incluídos no cálculo do CPO-D.
 Adicione uma linha em formato de lista informando o resultado.
 Se não houver menção a nenhum dente cariado, perdido ou obturado, não inclua o cálculo do CPO-D.
 Exemplo de formato: "- Índice CPO-D: 12 (C: 4, P: 6, O: 2)".
