@@ -1,9 +1,16 @@
-import { NextResponse } from "next/server";
 import { inngest } from "@/inngest/client";
+import { NextResponse } from "next/server";
 
 export async function POST(request: Request) {
   try {
     const data = await request.json();
+
+    if (!data.fileKey || !data.dentistEmail || !data.dentistId) {
+      return NextResponse.json(
+        { error: "Faltam parâmetros obrigatórios para o processamento." },
+        { status: 400 },
+      );
+    }
 
     await inngest.send({
       name: "audio/process.requested",
@@ -12,6 +19,7 @@ export async function POST(request: Request) {
         dentistName: data.dentistName,
         crosp: data.crosp,
         dentistEmail: data.dentistEmail,
+        dentistId: data.dentistId,
       },
     });
 

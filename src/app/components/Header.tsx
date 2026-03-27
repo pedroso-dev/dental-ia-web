@@ -44,6 +44,16 @@ export default function Header() {
             Nova Consulta
           </Link>
           <Link
+            href="/dental-evaluation"
+            className={`text-sm font-medium transition-colors ${
+              pathname === "/dental-evaluation"
+                ? "text-blue-600"
+                : "text-gray-500 hover:text-gray-900"
+            }`}
+          >
+            Avaliações
+          </Link>
+          <Link
             href="/settings"
             className={`text-sm font-medium transition-colors ${
               pathname === "/settings"
@@ -116,6 +126,16 @@ export default function Header() {
               }`}
             >
               Nova Consulta
+            </Link>
+            <Link
+              href="/dental-evaluation"
+              className={`text-sm font-medium transition-colors ${
+                pathname === "/dental-evaluation"
+                  ? "text-blue-600"
+                  : "text-gray-500 hover:text-gray-900"
+              }`}
+            >
+              Avaliações
             </Link>
             <Link
               href="/settings"

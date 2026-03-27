@@ -13,6 +13,7 @@ export default function AudioRecorder() {
   const [dentistName, setDentistName] = useState("");
   const [crosp, setCrosp] = useState("");
   const [dentistEmail, setDentistEmail] = useState("");
+  const [dentistId, setDentistId] = useState("");
   const [isReady, setIsReady] = useState(false);
 
   // NOVO: Estado para o consentimento da LGPD
@@ -37,6 +38,7 @@ export default function AudioRecorder() {
       }
 
       if (user.email) setDentistEmail(user.email);
+      setDentistId(user.id);
 
       const { data: profile } = await supabase
         .from("profiles")
@@ -124,7 +126,13 @@ export default function AudioRecorder() {
           const iaRes = await fetch("/api/process-audio", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ fileKey, dentistName, crosp, dentistEmail }),
+            body: JSON.stringify({
+              fileKey,
+              dentistName,
+              crosp,
+              dentistEmail,
+              dentistId,
+            }),
           });
 
           const result = await iaRes.json();

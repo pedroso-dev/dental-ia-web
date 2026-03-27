@@ -6,6 +6,7 @@ import {
   DeleteObjectCommand,
 } from "@aws-sdk/client-s3";
 import { Resend } from "resend";
+import { createClient } from "@supabase/supabase-js";
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY!);
 const resend = new Resend(process.env.RESEND_API_KEY!);
@@ -17,6 +18,10 @@ const s3Client = new S3Client({
     secretAccessKey: process.env.R2_SECRET_ACCESS_KEY || "",
   },
 });
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+);
 
 export const processAudioWorker = inngest.createFunction(
   {
@@ -25,7 +30,7 @@ export const processAudioWorker = inngest.createFunction(
     triggers: [{ event: "audio/process.requested" }],
   },
   async ({ event, step }) => {
-    const { fileKey, dentistName, crosp, dentistEmail } = event.data;
+    const { fileKey, dentistName, crosp, dentistEmail, dentistId } = event.data;
 
     // Etapa 1: Baixar o áudio do Cloudflare R2
     const audioData = await step.run("download-audio-from-r2", async () => {
@@ -126,6 +131,12 @@ Listar as hipóteses diagnósticas odontológicas explicitamente mencionadas ou 
 Incluir apenas quando houver base clínica suficiente. Caso contrário, omitir completamente.
 Formato: lista.
 
+## Índice CPO-D:
+Identifique a quantidade total de dentes cariados (C), perdidos/ausentes (P) e obturados/restaurados (O). Faça a soma matemática exata desses três valores para obter o índice CPO-D.
+Adicione uma linha em formato de lista informando o resultado.
+Se não houver menção a nenhum dente cariado, perdido ou obturado, não inclua o cálculo do CPO-D.
+Exemplo de formato: "- Índice CPO-D: 12 (C: 4, P: 6, O: 2)".
+
 ## Conduta:
 Incluir em lista:
 - Identificação do paciente com nome completo e data de nascimento, meta 1.
@@ -182,7 +193,28 @@ REGRAS DE INFERÊNCIA DIAGNÓSTICA ODONTOLÓGICA
       return result.response.text();
     });
 
-    // Etapa 3: Enviar o E-mail com o Resend
+    // Etapa 3.1: Salvar no Banco de Dados (Supabase)
+    await step.run("save-prontuario-to-db", async () => {
+      // Verifica se temos o ID do dentista antes de tentar salvar
+      if (!dentistId) {
+        console.warn("⚠️ Prontuário gerado, mas dentistId não fornecido. Não será salvo no histórico.");
+        return { success: false, reason: "No dentistId" };
+      }
+
+      const { error } = await supabaseAdmin
+        .from("prontuarios")
+        .insert([
+          { dentist_id: dentistId, content: prontuario }
+        ]);
+
+      if (error) {
+        throw new Error(`Erro ao salvar no Supabase: ${error.message}`);
+      }
+      console.log(`✅ Prontuário salvo no histórico do dentista ${dentistId}.`);
+      return { success: true };
+    });
+
+    // Etapa 3.2: Enviar o E-mail com o Resend
     await step.run("send-email", async () => {
       await resend.emails.send({
         from: "Prontuário IA <nao-responda@prontuario.mateuspedroso.com.br>",
