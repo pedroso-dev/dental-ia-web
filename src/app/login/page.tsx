@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
-import Link from "next/link"; // NOVO: Importação do Link
+import Link from "next/link";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -105,9 +105,17 @@ export default function LoginPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700">
-              Senha
-            </label>
+            <div className="flex justify-between items-center">
+              <label className="block text-sm font-medium text-gray-700">
+                Senha
+              </label>
+              <Link
+                href="/forgot-password"
+                className="text-sm font-medium text-blue-600 hover:text-blue-500 hover:underline"
+              >
+                Esqueceu a senha?
+              </Link>
+            </div>
             <input
               type="password"
               value={password}
@@ -140,7 +148,6 @@ export default function LoginPage() {
             </button>
           </div>
 
-          {/* NOVO: Links para as páginas legais */}
           <div className="mt-6 text-center text-xs text-gray-500">
             Ao entrar ou criar uma conta, você concorda com nossos <br />
             <Link href="/terms" className="text-blue-600 hover:underline">
