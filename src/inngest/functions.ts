@@ -1,5 +1,6 @@
 import { inngest } from "./client";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleAIFileManager } from "@google/generative-ai/server";
 import {
   S3Client,
   GetObjectCommand,
@@ -7,6 +8,9 @@ import {
 } from "@aws-sdk/client-s3";
 import { Resend } from "resend";
 import { createClient } from "@supabase/supabase-js";
+import fs from "fs";
+import path from "path";
+import os from "os";
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY!);
 const resend = new Resend(process.env.RESEND_API_KEY!);
@@ -32,22 +36,42 @@ export const processAudioWorker = inngest.createFunction(
   async ({ event, step }) => {
     const { fileKey, dentistName, crosp, dentistEmail, dentistId } = event.data;
 
-    // Etapa 1: Baixar o áudio do Cloudflare R2
-    const audioData = await step.run("download-audio-from-r2", async () => {
-      const getObjectCommand = new GetObjectCommand({
-        Bucket: process.env.R2_BUCKET_NAME,
-        Key: fileKey,
-      });
-      const response = await s3Client.send(getObjectCommand);
-      const byteArray = await response.Body?.transformToByteArray();
-      if (!byteArray) throw new Error("Áudio não encontrado no R2");
-      return Buffer.from(byteArray).toString("base64");
-    });
+    // Etapas 1 e 2 UNIFICADAS: Baixar do R2, fazer upload via File API e Processar
+    const prontuario = await step.run(
+      "download-and-process-audio",
+      async () => {
+        // 1. Baixar o áudio do Cloudflare R2
+        const getObjectCommand = new GetObjectCommand({
+          Bucket: process.env.R2_BUCKET_NAME,
+          Key: fileKey,
+        });
+        const response = await s3Client.send(getObjectCommand);
+        const byteArray = await response.Body?.transformToByteArray();
+        if (!byteArray) throw new Error("Áudio não encontrado no R2");
+        const buffer = Buffer.from(byteArray);
 
-    // Etapa 2: Processar com a IA (Gemini 2.5 Flash)
-    const prontuario = await step.run("process-audio-with-gemini", async () => {
-      const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-      const prompt = `
+        // 2. Salvar na pasta temporária do servidor (/tmp na Vercel)
+        const tempFilePath = path.join(os.tmpdir(), `${Date.now()}-audio.webm`);
+        fs.writeFileSync(tempFilePath, buffer);
+
+        const fileManager = new GoogleAIFileManager(
+          process.env.GOOGLE_AI_API_KEY!,
+        );
+        let uploadResult;
+
+        try {
+          // 3. Upload usando a API de Arquivos do Google (Suporta arquivos grandes)
+          uploadResult = await fileManager.uploadFile(tempFilePath, {
+            mimeType: "audio/webm",
+            displayName: `Consulta-${fileKey.replace(/\//g, "-")}`,
+          });
+
+          // 4. Processar com a IA usando a URI do arquivo
+          const model = genAI.getGenerativeModel({
+            model: "gemini-2.5-flash",
+            generationConfig: { temperature: 0.0, topP: 0.8, topK: 10 },
+          });
+          const prompt = `
 Você é um assistente especializado em transformar transcrições e anotações clínicas em evoluções odontológicas hospitalares de PRIMEIRA CONSULTA, em português, com linguagem técnica, objetiva, clara e adequada para prontuário.
 
 FUNÇÃO
@@ -159,7 +183,7 @@ Formato: lista.
 ASSINATURA FINAL OBRIGATÓRIA
 Ao final de toda evolução, após o último item preenchido, deixar uma linha em branco e escrever exatamente:
 
-${dentistName ? dentistName : "Patrícia Vilas Boas"} - CROSP ${crosp ? crosp : "105731"}
+${dentistName ? dentistName : "Nome do dentista"} - CROSP ${crosp ? crosp : "123456"}
 
 COMPORTAMENTO QUANDO O USUÁRIO ENVIAR UMA TRANSCRIÇÃO
 - Ler toda a transcrição antes de responder.
@@ -178,7 +202,7 @@ FORMATO FINAL
   # Odontologia Hospitalar IPer- Primeira avaliação #
 - Após o cabeçalho, deixar uma linha em branco e seguir com a evolução.
 - Finalizar obrigatoriamente com:
-  ${dentistName ? dentistName : "Patrícia Vilas Boas"} - CROSP ${crosp ? crosp : "105731"}
+  ${dentistName ? dentistName : "Nome do dentista"} - CROSP ${crosp ? crosp : "123456"}
 - Sem introdução.
 - Sem conclusão.
 - Sem observações fora do modelo.
@@ -189,26 +213,41 @@ REGRAS DE INFERÊNCIA DIAGNÓSTICA ODONTOLÓGICA
 - Se os achados forem inespecíficos, incompletos ou insuficientes, omitir o diagnóstico.
       `;
 
-      const result = await model.generateContent([
-        prompt,
-        { inlineData: { data: audioData, mimeType: "audio/webm" } },
-      ]);
-      return result.response.text();
-    });
+          const result = await model.generateContent([
+            prompt,
+            {
+              fileData: {
+                fileUri: uploadResult.file.uri,
+                mimeType: uploadResult.file.mimeType,
+              },
+            },
+          ]);
+          return result.response.text();
+        } finally {
+          // 5. CLEANUP OBRIGATÓRIO (LGPD e Gestão de Espaço)
+          if (fs.existsSync(tempFilePath)) {
+            fs.unlinkSync(tempFilePath);
+          }
+          if (uploadResult && uploadResult.file.name) {
+            await fileManager.deleteFile(uploadResult.file.name);
+          }
+        }
+      },
+    );
 
     // Etapa 3.1: Salvar no Banco de Dados (Supabase)
     await step.run("save-prontuario-to-db", async () => {
       // Verifica se temos o ID do dentista antes de tentar salvar
       if (!dentistId) {
-        console.warn("⚠️ Prontuário gerado, mas dentistId não fornecido. Não será salvo no histórico.");
+        console.warn(
+          "⚠️ Prontuário gerado, mas dentistId não fornecido. Não será salvo no histórico.",
+        );
         return { success: false, reason: "No dentistId" };
       }
 
       const { error } = await supabaseAdmin
         .from("prontuarios")
-        .insert([
-          { dentist_id: dentistId, content: prontuario }
-        ]);
+        .insert([{ dentist_id: dentistId, content: prontuario }]);
 
       if (error) {
         throw new Error(`Erro ao salvar no Supabase: ${error.message}`);

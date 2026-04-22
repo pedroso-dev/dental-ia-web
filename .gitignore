@@ -12,7 +12,8 @@
 
 # testing
 /coverage
-__tests__
+__tests__/__fixtures__
+/src/app/test-upload
 
 # next.js
 /.next/
