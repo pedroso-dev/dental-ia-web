@@ -1,31 +1,36 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
+import { useAudioRecorder } from "@/app/hooks/useAudioRecorder";
+import { useProntuarioUpload } from "@/app/hooks/useProntuarioUpload";
 
 export default function AudioRecorder() {
-  const [isRecording, setIsRecording] = useState(false);
-  const [recordingTime, setRecordingTime] = useState(0);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [statusMessage, setStatusMessage] = useState("");
-
+  // Estados do usuário e LGPD
   const [dentistName, setDentistName] = useState("");
   const [crosp, setCrosp] = useState("");
   const [dentistEmail, setDentistEmail] = useState("");
   const [dentistId, setDentistId] = useState("");
   const [isReady, setIsReady] = useState(false);
-
-  // NOVO: Estado para o consentimento da LGPD
   const [consentGiven, setConsentGiven] = useState(false);
-
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<BlobPart[]>([]);
-  const isCancelledRef = useRef(false);
 
   const router = useRouter();
   const supabase = createClient();
 
+  // Nossos novos Custom Hooks 🚀
+  const {
+    isRecording,
+    formattedTime,
+    startRecording,
+    stopRecording,
+    cancelRecording,
+  } = useAudioRecorder();
+
+  const { isProcessing, statusMessage, setStatusMessage, uploadAndProcess } =
+    useProntuarioUpload();
+
+  // Busca os dados da dentista no banco
   useEffect(() => {
     const fetchUserData = async () => {
       const {
@@ -58,133 +63,35 @@ export default function AudioRecorder() {
     fetchUserData();
   }, [router, supabase]);
 
-  useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (isRecording) {
-      interval = setInterval(() => setRecordingTime((prev) => prev + 1), 1000);
-    }
-    return () => clearInterval(interval);
-  }, [isRecording]);
-
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+  // Funções "ponte" que conectam a interface aos Hooks
+  const handleStartRecording = async () => {
+    if (!isReady || !consentGiven) return;
+    setStatusMessage("");
+    await startRecording();
   };
 
-  const startRecording = async () => {
-    if (!isReady || !consentGiven) return; // Trava extra de segurança
+  const handleStopRecording = async () => {
+    setConsentGiven(false);
+    const audioBlob = await stopRecording(); // A mágica da Promise aqui!
 
-    try {
-      setRecordingTime(0);
-      setStatusMessage("");
-      isCancelledRef.current = false;
-
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
-      audioChunksRef.current = [];
-
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) audioChunksRef.current.push(event.data);
-      };
-
-      mediaRecorder.onstop = async () => {
-        // Desmarca o consentimento para o próximo paciente
-        setConsentGiven(false);
-
-        if (isCancelledRef.current) {
-          isCancelledRef.current = false;
-          return;
-        }
-
-        const audioBlob = new Blob(audioChunksRef.current, {
-          type: "audio/webm",
-        });
-        setIsProcessing(true);
-        setStatusMessage("Fazendo upload do áudio seguro...");
-
-        try {
-          const filename = `consulta-${Date.now()}.webm`;
-          const uploadRes = await fetch("/api/upload", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ filename, contentType: "audio/webm" }),
-          });
-
-          if (!uploadRes.ok) throw new Error("Falha ao obter URL");
-          const { uploadUrl, fileKey } = await uploadRes.json();
-
-          await fetch(uploadUrl, {
-            method: "PUT",
-            headers: { "Content-Type": "audio/webm" },
-            body: audioBlob,
-          });
-
-          setStatusMessage("Enviando para a fila de processamento da IA...");
-
-          const iaRes = await fetch("/api/process-audio", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              fileKey,
-              dentistName,
-              crosp,
-              dentistEmail,
-              dentistId,
-            }),
-          });
-
-          const result = await iaRes.json();
-
-          if (iaRes.ok) {
-            setStatusMessage(
-              "✅ Áudio na fila! O prontuário chegará no seu e-mail em breve.",
-            );
-          } else {
-            throw new Error(result.error || "Erro ao processar");
-          }
-        } catch (error) {
-          console.error("Erro:", error);
-          setStatusMessage("❌ Ocorreu um erro ao processar a consulta.");
-        } finally {
-          setIsProcessing(false);
-        }
-      };
-
-      mediaRecorder.start();
-      setIsRecording(true);
-    } catch (error) {
-      console.error(error);
-      alert("Permita o acesso ao microfone.");
+    if (audioBlob) {
+      // Passa a bola para o Hook de Upload
+      await uploadAndProcess(audioBlob, {
+        dentistName,
+        crosp,
+        dentistEmail,
+        dentistId,
+      });
     }
   };
 
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      isCancelledRef.current = false;
-      mediaRecorderRef.current.stop();
-      mediaRecorderRef.current.stream
-        .getTracks()
-        .forEach((track) => track.stop());
-      setIsRecording(false);
-    }
+  const handleCancelRecording = () => {
+    cancelRecording();
+    setConsentGiven(false);
+    setStatusMessage("Gravação cancelada.");
   };
 
-  const cancelRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      isCancelledRef.current = true;
-      mediaRecorderRef.current.stop();
-      mediaRecorderRef.current.stream
-        .getTracks()
-        .forEach((track) => track.stop());
-      setIsRecording(false);
-      setRecordingTime(0);
-      setStatusMessage("Gravação cancelada.");
-      setConsentGiven(false); // Desmarca o consentimento ao cancelar
-    }
-  };
-
+  // Renderização da Interface (inalterada, apenas consumindo variáveis mais limpas)
   if (!isReady) {
     return (
       <div className="flex justify-center p-8">
@@ -208,13 +115,21 @@ export default function AudioRecorder() {
 
       {isRecording && (
         <div className="text-5xl font-mono font-bold text-red-500 animate-pulse my-4">
-          {formatTime(recordingTime)}
+          {formattedTime}
         </div>
       )}
 
       {statusMessage && (
         <div
-          className={`font-medium mb-2 ${statusMessage.includes("✅") ? "text-green-600" : statusMessage.includes("❌") ? "text-red-600" : "text-blue-600 animate-pulse"}`}
+          className={`font-medium mb-2 ${
+            statusMessage.includes("✅")
+              ? "text-green-600"
+              : statusMessage.includes("❌")
+                ? "text-red-600"
+                : statusMessage.includes("cancelada")
+                  ? "text-gray-500"
+                  : "text-blue-600 animate-pulse"
+          }`}
         >
           {statusMessage}
         </div>
@@ -243,13 +158,13 @@ export default function AudioRecorder() {
         {isRecording ? (
           <div className="flex w-full gap-4">
             <button
-              onClick={cancelRecording}
+              onClick={handleCancelRecording}
               className="flex-1 py-4 rounded-xl font-medium text-gray-700 bg-gray-200 hover:bg-gray-300 transition-all text-lg shadow-sm"
             >
               Cancelar
             </button>
             <button
-              onClick={stopRecording}
+              onClick={handleStopRecording}
               className="flex-1 py-4 rounded-xl font-medium text-white bg-green-600 hover:bg-green-700 transition-all text-lg shadow-sm"
             >
               Finalizar Gravação
@@ -257,7 +172,7 @@ export default function AudioRecorder() {
           </div>
         ) : (
           <button
-            onClick={startRecording}
+            onClick={handleStartRecording}
             disabled={isProcessing || !consentGiven}
             className={`w-full py-5 rounded-xl font-bold text-white transition-all text-xl shadow-md ${
               isProcessing || !consentGiven

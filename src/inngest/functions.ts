@@ -258,12 +258,19 @@ REGRAS DE INFERÊNCIA DIAGNÓSTICA ODONTOLÓGICA
 
     // Etapa 3.2: Enviar o E-mail com o Resend
     await step.run("send-email", async () => {
-      await resend.emails.send({
+      const { data, error } = await resend.emails.send({
         from: "Prontuário IA <nao-responda@prontuario.mateuspedroso.com.br>",
         to: dentistEmail,
         subject: `Evolução Odontológica - Paciente (Nova Consulta)`,
         text: prontuario,
       });
+
+      if (error) {
+        throw new Error(`Erro no Resend: ${error.message}`);
+      }
+
+      console.log(`✅ E-mail enviado com sucesso. ID: ${data?.id}`);
+      return { success: true, emailId: data?.id };
     });
 
     // Etapa 4: Deletar o áudio do Cloudflare R2 por segurança e LGPD
