@@ -5,9 +5,9 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import { useAudioRecorder } from "@/app/hooks/useAudioRecorder";
 import { useProntuarioUpload } from "@/app/hooks/useProntuarioUpload";
+import { get, del } from "idb-keyval"; // 👈 Importamos o leitor do IndexedDB
 
 export default function AudioRecorder() {
-  // Estados do usuário e LGPD
   const [dentistName, setDentistName] = useState("");
   const [crosp, setCrosp] = useState("");
   const [dentistEmail, setDentistEmail] = useState("");
@@ -15,10 +15,12 @@ export default function AudioRecorder() {
   const [isReady, setIsReady] = useState(false);
   const [consentGiven, setConsentGiven] = useState(false);
 
+  // 🛡️ Estado para controlar o Backup Local
+  const [pendingAudio, setPendingAudio] = useState<Blob | null>(null);
+
   const router = useRouter();
   const supabase = createClient();
 
-  // Nossos novos Custom Hooks 🚀
   const {
     isRecording,
     formattedTime,
@@ -30,13 +32,12 @@ export default function AudioRecorder() {
   const { isProcessing, statusMessage, setStatusMessage, uploadAndProcess } =
     useProntuarioUpload();
 
-  // Busca os dados da dentista no banco
+  // 1. Busca os dados do Supabase
   useEffect(() => {
     const fetchUserData = async () => {
       const {
         data: { user },
       } = await supabase.auth.getUser();
-
       if (!user) {
         router.push("/login");
         return;
@@ -51,7 +52,7 @@ export default function AudioRecorder() {
         .eq("id", user.id)
         .single();
 
-      if (profile && profile.full_name && profile.crosp) {
+      if (profile?.full_name && profile?.crosp) {
         setDentistName(profile.full_name);
         setCrosp(profile.crosp);
         setIsReady(true);
@@ -59,11 +60,24 @@ export default function AudioRecorder() {
         router.push("/settings");
       }
     };
-
     fetchUserData();
   }, [router, supabase]);
 
-  // Funções "ponte" que conectam a interface aos Hooks
+  // 2. 🔄 NOVO: Verifica se há áudio preso no dispositivo ao carregar a tela
+  useEffect(() => {
+    const checkPendingAudio = async () => {
+      try {
+        const backup = await get("pending_audio_backup");
+        if (backup instanceof Blob) {
+          setPendingAudio(backup);
+        }
+      } catch (error) {
+        console.error("Erro ao verificar backup local:", error);
+      }
+    };
+    checkPendingAudio();
+  }, []);
+
   const handleStartRecording = async () => {
     if (!isReady || !consentGiven) return;
     setStatusMessage("");
@@ -72,10 +86,9 @@ export default function AudioRecorder() {
 
   const handleStopRecording = async () => {
     setConsentGiven(false);
-    const audioBlob = await stopRecording(); // A mágica da Promise aqui!
+    const audioBlob = await stopRecording();
 
     if (audioBlob) {
-      // Passa a bola para o Hook de Upload
       await uploadAndProcess(audioBlob, {
         dentistName,
         crosp,
@@ -91,7 +104,26 @@ export default function AudioRecorder() {
     setStatusMessage("Gravação cancelada.");
   };
 
-  // Renderização da Interface (inalterada, apenas consumindo variáveis mais limpas)
+  // 🔄 NOVO: Funções de Recuperação do Backup
+  const handleRetryUpload = async () => {
+    if (!pendingAudio) return;
+    const success = await uploadAndProcess(pendingAudio, {
+      dentistName,
+      crosp,
+      dentistEmail,
+      dentistId,
+    });
+    if (success) {
+      setPendingAudio(null); // Remove o aviso da tela se deu certo
+    }
+  };
+
+  const handleDiscardBackup = async () => {
+    await del("pending_audio_backup");
+    setPendingAudio(null);
+    setStatusMessage("Backup antigo descartado com sucesso.");
+  };
+
   if (!isReady) {
     return (
       <div className="flex justify-center p-8">
@@ -113,6 +145,35 @@ export default function AudioRecorder() {
         </p>
       </div>
 
+      {/* 🚨 NOVO: Banner de Áudio Pendente */}
+      {pendingAudio && !isRecording && (
+        <div className="w-full p-4 bg-orange-50 border border-orange-200 rounded-xl flex flex-col gap-3">
+          <div className="flex items-center gap-2 text-orange-800 font-semibold">
+            <span>⚠️ Consulta Pendente Encontrada</span>
+          </div>
+          <p className="text-sm text-orange-700 leading-snug">
+            Um áudio anterior não pôde ser enviado devido a uma falha de
+            conexão. Deseja enviar agora ou descartar?
+          </p>
+          <div className="flex gap-3 mt-1">
+            <button
+              onClick={handleRetryUpload}
+              disabled={isProcessing}
+              className="flex-1 bg-orange-600 text-white py-2.5 rounded-lg font-medium hover:bg-orange-700 transition-all disabled:opacity-50 shadow-sm"
+            >
+              {isProcessing ? "Enviando..." : "Enviar Agora"}
+            </button>
+            <button
+              onClick={handleDiscardBackup}
+              disabled={isProcessing}
+              className="flex-1 bg-white text-orange-600 border border-orange-300 py-2.5 rounded-lg font-medium hover:bg-orange-50 transition-all disabled:opacity-50"
+            >
+              Descartar
+            </button>
+          </div>
+        </div>
+      )}
+
       {isRecording && (
         <div className="text-5xl font-mono font-bold text-red-500 animate-pulse my-4">
           {formattedTime}
@@ -121,12 +182,13 @@ export default function AudioRecorder() {
 
       {statusMessage && (
         <div
-          className={`font-medium mb-2 ${
+          className={`font-medium mb-2 text-center ${
             statusMessage.includes("✅")
               ? "text-green-600"
               : statusMessage.includes("❌")
                 ? "text-red-600"
-                : statusMessage.includes("cancelada")
+                : statusMessage.includes("cancelada") ||
+                    statusMessage.includes("descartado")
                   ? "text-gray-500"
                   : "text-blue-600 animate-pulse"
           }`}
@@ -173,9 +235,9 @@ export default function AudioRecorder() {
         ) : (
           <button
             onClick={handleStartRecording}
-            disabled={isProcessing || !consentGiven}
+            disabled={isProcessing || !consentGiven || pendingAudio !== null}
             className={`w-full py-5 rounded-xl font-bold text-white transition-all text-xl shadow-md ${
-              isProcessing || !consentGiven
+              isProcessing || !consentGiven || pendingAudio !== null
                 ? "bg-gray-400 cursor-not-allowed opacity-70"
                 : "bg-blue-600 hover:bg-blue-700 hover:-translate-y-1 hover:shadow-lg"
             }`}

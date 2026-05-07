@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
+import { set, del } from "idb-keyval";
 
-// Tipagem para garantir que não vamos esquecer nenhum dado do dentista
 export interface DentistData {
   dentistName: string;
   crosp: string;
@@ -15,9 +15,13 @@ export function useProntuarioUpload() {
   const uploadAndProcess = useCallback(
     async (audioBlob: Blob, dentistData: DentistData) => {
       setIsProcessing(true);
-      setStatusMessage("Fazendo upload do áudio seguro...");
+      setStatusMessage("Salvando backup local...");
 
       try {
+        // 🛡️ OFFLINE FIRST: Salva o Blob no navegador antes de ir para a rede
+        await set("pending_audio_backup", audioBlob);
+
+        setStatusMessage("Fazendo upload do áudio seguro...");
         const filename = `consulta-${Date.now()}.webm`;
 
         // 1. Pede permissão para o Cloudflare R2
@@ -31,7 +35,7 @@ export function useProntuarioUpload() {
           throw new Error("Falha ao obter URL segura para upload");
         const { uploadUrl, fileKey } = await uploadRes.json();
 
-        // 2. Envia o áudio pesado diretamente do navegador para o R2 (Bypass)
+        // 2. Envia o áudio pesado diretamente do navegador para o R2
         await fetch(uploadUrl, {
           method: "PUT",
           headers: { "Content-Type": "audio/webm" },
@@ -56,6 +60,9 @@ export function useProntuarioUpload() {
         const result = await iaRes.json();
 
         if (iaRes.ok) {
+          // 🗑️ CLEANUP: A rede funcionou perfeitamente! Podemos apagar o backup local.
+          await del("pending_audio_backup");
+
           setStatusMessage(
             "✅ Áudio na fila! O prontuário chegará no seu e-mail em breve.",
           );
@@ -67,7 +74,10 @@ export function useProntuarioUpload() {
         }
       } catch (error) {
         console.error("Erro no fluxo de upload/processamento:", error);
-        setStatusMessage("❌ Ocorreu um erro ao processar a consulta.");
+        // 🚨 EM CASO DE ERRO: Deixamos o backup lá quieto e avisamos o utilizador
+        setStatusMessage(
+          "❌ Erro de conexão. O áudio está salvo e seguro no seu dispositivo!",
+        );
         return false;
       } finally {
         setIsProcessing(false);
@@ -80,6 +90,6 @@ export function useProntuarioUpload() {
     isProcessing,
     statusMessage,
     uploadAndProcess,
-    setStatusMessage, // Exportamos caso o componente queira limpar a mensagem ao gravar novo áudio
+    setStatusMessage,
   };
 }
