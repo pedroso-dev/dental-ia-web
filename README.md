@@ -1,60 +1,60 @@
-# 🦷 DentalAI Assistant - MVP
+# DentalAI 🦷✨
 
-Um sistema inteligente para automação de prontuários odontológicos hospitalares. O aplicativo grava o áudio da consulta, realiza o upload seguro para a nuvem e utiliza Inteligência Artificial (Google Gemini) para gerar uma evolução clínica estruturada no padrão ISO de Odontologia Hospitalar.
+O **DentalAI** é um ecossistema focado na automação de prontuários e evoluções odontológicas utilizando Inteligência Artificial. O sistema permite que dentistas gravem suas consultas e recebam automaticamente um prontuário estruturado e formatado via e-mail, utilizando modelos avançados de Processamento de Linguagem Natural (LLM).
 
-## 🚀 Funcionalidades
+## 🚀 Diferenciais Técnicos (V1.1.0)
 
-- **Gravação de Áudio Nativa:** Captura de áudio direto no navegador com feedback visual e cronômetro.
-- **Armazenamento Seguro (Cloudflare R2):** Upload de arquivos `.webm` utilizando AWS S3 SDK com geração de Pre-signed URLs para máxima segurança.
-- **Processamento com IA (Google Gemini):** Transcrição e formatação automática do áudio em um prontuário clínico detalhado, focando em jargões técnicos (ex: "hígido", "mesial").
-- **Assinatura Dinâmica:** Inclusão automática do nome e CROSP do profissional no final do prontuário.
+- **Resiliência Offline-First:** Gravação segura utilizando IndexedDB (via `idb-keyval`) para garantir que nenhum áudio seja perdido em caso de falha de conexão.
+- **Arquitetura Event-Driven (Long-Running):** Processamento assíncrono orquestrado pelo Inngest, permitindo lidar com áudios extensos (até 1 hora) sem estourar limites de timeout de requisições web.
+- **Upload de Baixa Latência:** Bypass do servidor principal utilizando Pre-signed URLs do AWS S3 SDK para upload direto no Cloudflare R2.
+- **Progressive Web App (PWA):** Instalação nativa em dispositivos móveis já configurada, proporcionando uma experiência de app mobile para os dentistas.
 
-## 🛠️ Tecnologias Utilizadas
+## 🏗️ Stack Tecnológica
 
-- **Frontend/Backend:** Next.js 16 (App Router) + React 19
-- **Estilização:** Tailwind CSS v4
-- **Armazenamento (Storage):** Cloudflare R2 (compatível com API S3)
-- **Inteligência Artificial:** Google AI SDK (Modelo: `gemini-2.5-flash` / `gemini-1.5-pro`)
+- **Frontend:** [Next.js 16](https://nextjs.org/) (App Router), React 19, Tailwind CSS v4.
+- **Backend & Workers:** Inngest (Job Scheduling & Orquestração).
+- **Database & Auth:** [Supabase](https://supabase.com/) (PostgreSQL).
+- **File Storage:** [Cloudflare R2](https://www.cloudflare.com/developer-platform/r2/) (compatível com S3 API).
+- **AI Engine:** Google AI Studio (Modelo: `gemini-2.5-flash`).
+- **Email Service:** [Resend](https://resend.com/).
 
-## ⚙️ Configuração do Ambiente Local
+## 📂 Estrutura de Diretórios e Clean Code
 
-Para rodar este projeto na sua máquina, você precisará configurar as variáveis de ambiente.
+O projeto segue princípios de separação de responsabilidades e Clean Architecture através de Custom Hooks:
 
-1. Clone o repositório.
-2. Crie um arquivo chamado `.env.local` na raiz do projeto.
-3. Adicione as seguintes chaves (substitua pelos seus dados reais):
+- `src/app/hooks/useAudioRecorder.ts`: Gerencia a API de MediaRecorder do navegador, o timer e a persistência local (IndexedDB).
+- `src/app/hooks/useProntuarioUpload.ts`: Orquestra o fluxo de rede (Cloudflare R2 -> Inngest Trigger).
+- `src/inngest/functions.ts`: Contém o "Worker" (`process-audio-and-send-email`) que executa o processamento pesado de IA em background.
 
-```env
-# Cloudflare R2 (Armazenamento de Áudio)
-R2_ACCOUNT_ID="seu_account_id_aqui"
-R2_ACCESS_KEY_ID="sua_access_key_aqui"
-R2_SECRET_ACCESS_KEY="sua_secret_key_aqui"
-R2_BUCKET_NAME="dental-ai-audio-dev"
+## 🔄 Fluxo de Dados
 
-# Google AI Studio (Processamento e Transcrição)
-GOOGLE_AI_API_KEY="sua_chave_do_gemini_aqui"
-```
+1.  **Capture:** Áudio capturado via navegador e salvo no IndexedDB.
+2.  **Storage:** Upload direto do navegador para o Cloudflare R2 via Pre-signed URL.
+3.  **Trigger:** Evento enviado para a fila do Inngest (`audio/process.requested`).
+4.  **Process:** O Worker baixa o áudio do R2, envia para a API do Gemini via Google File API e gera a evolução estruturada.
+5.  **Persist:** O prontuário em texto é salvo na tabela `prontuarios` no Supabase.
+6.  **Notify:** O Resend envia o prontuário formatado para o e-mail do dentista.
+7.  **Cleanup:** O áudio original é removido do R2, do diretório temporário do servidor e do IndexedDB, garantindo máxima conformidade com a LGPD.
 
-## 📦 Configuração do Ambiente Local
+## 🛠️ Configuração de Ambiente
 
-Instale as dependências:
+O projeto utiliza um arquivo de exemplo para o mapeamento das variáveis de ambiente. Para rodar localmente:
 
-```Bash
-npm install
-```
+1. Duplique o arquivo `.env.example` na raiz do repositório.
+2. Renomeie a cópia para `.env.local`.
+3. Preencha as chaves de API correspondentes de cada serviço.
+   _(Nota: Em desenvolvimento local, a variável `INNGEST_DEV=1` presente no arquivo de exemplo dispensa o uso de chaves do servidor remoto do Inngest)._
 
-Inicie o servidor de desenvolvimento:
+## 📜 Padrões de Desenvolvimento
 
-```Bash
-npm run dev
-```
-Abra http://localhost:3000 no seu navegador para ver a aplicação.
+- **Commits:** Sempre em Inglês seguindo o padrão [Conventional Commits](https://www.conventionalcommits.org/).
+- **Branches:** \* `feature/` para novas funcionalidades.
+  - `fix/` para correção de bugs.
+  - `refactor/` para melhorias estruturais de código.
+- **Versão:** Gerenciada via `npm version [patch|minor|major]` e refletida no `package.json`.
 
-## ⚠️ Notas de Deploy (Vercel)
+## 🛤️ Próximos Passos (Backlog)
 
-Ao realizar o deploy na Vercel:
-
-1. Certifique-se de cadastrar todas as variáveis de ambiente citadas acima nas configurações do projeto na Vercel.
-2. Adicione a URL de produção gerada pela Vercel nas regras de CORS Policy dentro do painel do seu bucket no Cloudflare R2.
-
-### Tudo pronto para a decolagem! 🚀
+- [ ] Implementação da Arquitetura Multitenant com Row Level Security (RLS) no Supabase.
+- [ ] Motor de Prompts Dinâmicos customizáveis por Clínica/Inquilino.
+- [ ] Dashboard de monitoramento de status em Real-time via Supabase WebSockets.
