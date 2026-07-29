@@ -20,10 +20,65 @@ export function useAudioRecorder() {
     return () => clearInterval(interval);
   }, [isRecording]);
 
+  // const startRecording = useCallback(async () => {
+  //   try {
+  //     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  //     const mediaRecorder = new MediaRecorder(stream);
+
+  //     mediaRecorderRef.current = mediaRecorder;
+  //     audioChunksRef.current = [];
+  //     setRecordingTime(0);
+  //     isCancelledRef.current = false;
+
+  //     mediaRecorder.ondataavailable = (event) => {
+  //       if (event.data.size > 0) audioChunksRef.current.push(event.data);
+  //     };
+
+  //     mediaRecorder.onstop = () => {
+  //       // Desliga o microfone (luz vermelha da aba do navegador)
+  //       stream.getTracks().forEach((track) => track.stop());
+
+  //       if (isCancelledRef.current) {
+  //         if (resolveBlobRef.current) resolveBlobRef.current(null);
+  //       } else {
+  //         // Se não foi cancelado, gera o arquivo de áudio final
+  //         const audioBlob = new Blob(audioChunksRef.current, {
+  //           type: "audio/webm",
+  //         });
+  //         if (resolveBlobRef.current) resolveBlobRef.current(audioBlob);
+  //       }
+
+  //       resolveBlobRef.current = null;
+  //     };
+
+  //     mediaRecorder.start();
+  //     setIsRecording(true);
+  //   } catch (error) {
+  //     console.error("Erro ao acessar microfone:", error);
+  //     throw new Error(
+  //       "Permissão de microfone negada ou dispositivo não encontrado.",
+  //     );
+  //   }
+  // }, []);
   const startRecording = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
+
+      // 1. Configuração de compressão: 32 kbps (Podcast Quality - excelente para voz)
+      const options: MediaRecorderOptions = { audioBitsPerSecond: 32000 };
+      let mediaRecorder: MediaRecorder;
+
+      try {
+        // Tenta aplicar a compressão
+        mediaRecorder = new MediaRecorder(stream, options);
+      } catch (e) {
+        // Fallback de segurança para iPhones antigos que não aceitam opções manuais
+        console.warn(
+          "Navegador não aceita opções de compressão, usando padrão.",
+          e,
+        );
+        mediaRecorder = new MediaRecorder(stream);
+      }
 
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
@@ -41,10 +96,13 @@ export function useAudioRecorder() {
         if (isCancelledRef.current) {
           if (resolveBlobRef.current) resolveBlobRef.current(null);
         } else {
-          // Se não foi cancelado, gera o arquivo de áudio final
+          // 2. 🚨 CORREÇÃO VITAL PARA iOS: Pega o formato real que o aparelho gravou (MP4 ou WebM)
+          const mimeType = mediaRecorder.mimeType || "audio/webm";
+
           const audioBlob = new Blob(audioChunksRef.current, {
-            type: "audio/webm",
+            type: mimeType,
           });
+
           if (resolveBlobRef.current) resolveBlobRef.current(audioBlob);
         }
 
