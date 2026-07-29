@@ -35,11 +35,35 @@ export function useProntuarioUpload() {
           throw new Error("Falha ao obter URL segura para upload");
         const { uploadUrl, fileKey } = await uploadRes.json();
 
-        // 2. Envia o áudio pesado diretamente do navegador para o R2
-        await fetch(uploadUrl, {
-          method: "PUT",
-          headers: { "Content-Type": "audio/webm" },
-          body: audioBlob,
+        // // 2. Envia o áudio pesado diretamente do navegador para o R2
+        // await fetch(uploadUrl, {
+        //   method: "PUT",
+        //   headers: { "Content-Type": "audio/webm" },
+        //   body: audioBlob,
+        // });
+
+        // 2. Envia o áudio pesado diretamente do navegador para o R2 (Resiliente para iOS)
+        await new Promise((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open("PUT", uploadUrl, true);
+          xhr.setRequestHeader("Content-Type", "audio/webm");
+          // Força o navegador a segurar a conexão por até 10 minutos (600.000 ms)
+          xhr.timeout = 600000;
+          xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+              resolve(xhr.response);
+            } else {
+              reject(
+                new Error(`Falha no upload para o R2. Status: ${xhr.status}`),
+              );
+            }
+          };
+          xhr.onerror = () =>
+            reject(new Error("Erro de rede durante o upload."));
+          xhr.ontimeout = () =>
+            reject(new Error("O upload excedeu o tempo limite."));
+
+          xhr.send(audioBlob);
         });
 
         setStatusMessage("Enviando para a fila de processamento da IA...");

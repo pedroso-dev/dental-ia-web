@@ -9,6 +9,11 @@ const withPWA = withPWAInit({
 });
 
 const nextConfig: NextConfig = {
+  experimental: {
+    serverActions: {
+      bodySizeLimit: "100mb",
+    },
+  },
   output: "standalone",
   env: {
     NEXT_PUBLIC_APP_VERSION: pkg.version,
